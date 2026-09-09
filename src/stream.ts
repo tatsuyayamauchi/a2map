@@ -1,4 +1,5 @@
 import type { A2MapSpec } from "./types.js";
+import { safeParseA2MapSpec } from "./schema.js";
 
 /**
  * Progressive streaming parser for A2Map specification updates.
@@ -35,8 +36,9 @@ export class A2MapStreamConsumer {
 
     try {
       const candidate = JSON.parse(jsonMatch[1]);
-      if (candidate && candidate.version === "1.0") {
-        this.onSpecUpdate(candidate as A2MapSpec);
+      const result = safeParseA2MapSpec(candidate);
+      if (result.success) {
+        this.onSpecUpdate(result.data as A2MapSpec);
       }
     } catch {
       // Chunk may still be incomplete, wait for subsequent chunks

@@ -12,3 +12,5 @@ export * from "./widgets.js";
 export * from "./stream.js";
 export * from "./react.js";
 export * from "./sanitize.js";
+export * from "./schema.js";
+export * from "./tools.js";

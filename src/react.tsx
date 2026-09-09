@@ -40,7 +40,17 @@ export const A2MapViewer = forwardRef<A2MapHandle, A2MapViewerProps>(
       onMapReadyRef.current = onMapReady;
     }, [onMapReady]);
 
-    const controllerRef = useRef<A2MapController>(createA2MapController(() => mapRef.current));
+    const specRef = useRef(spec);
+    useEffect(() => {
+      specRef.current = spec;
+    }, [spec]);
+
+    const controllerRef = useRef<A2MapController>(
+      createA2MapController(
+        () => mapRef.current,
+        () => specRef.current
+      )
+    );
 
     useImperativeHandle(ref, () => controllerRef.current);
 

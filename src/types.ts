@@ -126,6 +126,8 @@ export interface A2MapLayer {
   maxZoom?: number;
   interactive?: boolean;
   tooltip?: A2MapTooltipConfig;
+  beforeId?: string; // ID of the layer before which this layer should be placed
+  zIndex?: number; // Stacking order priority
 }
 
 export interface A2MapMarker {
@@ -271,11 +273,46 @@ export type A2MapEvent =
       coordinates: [number, number];
     };
 
+export interface A2MapVisibleFeature {
+  layerId: string;
+  geometryType: string;
+  properties: Record<string, unknown>;
+}
+
+export interface A2MapAgentContext {
+  camera: {
+    center: [number, number];
+    zoom: number;
+    pitch: number;
+    bearing: number;
+    bounds: [number, number, number, number]; // [minLng, minLat, maxLng, maxLat]
+  };
+  activeLayers: Array<{
+    id: string;
+    type: A2MapLayerType;
+    visible: boolean;
+    label?: string;
+  }>;
+  markers: Array<{
+    id: string;
+    coordinates: [number, number];
+    label?: string;
+  }>;
+  visibleFeatures?: A2MapVisibleFeature[];
+}
+
+export interface A2MapContextOptions {
+  includeFeatures?: boolean;
+  maxFeatures?: number;
+  targetLayerIds?: string[];
+}
+
 /**
  * Programmatic controller interface for MapLibre GL
  */
 export interface A2MapController {
   getMapInstance: () => MapLibreMap | null;
+  getAgentContext: (options?: A2MapContextOptions) => A2MapAgentContext | null;
   flyTo: (options: A2MapCamera) => void;
   easeTo: (options: A2MapCamera) => void;
   jumpTo: (options: A2MapCamera) => void;

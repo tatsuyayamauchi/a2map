@@ -280,6 +280,52 @@ export class A2MapReconciler {
     }
   }
 
+  private resolveBeforeSublayerId(beforeId?: string): string | undefined {
+    if (!beforeId) return undefined;
+    if (this.map.getLayer(beforeId)) return beforeId;
+    const candidates = [
+      `${beforeId}-fill`,
+      `${beforeId}-line-bg`,
+      `${beforeId}-line`,
+      `${beforeId}-circle`,
+      `${beforeId}-extrusion`,
+      `${beforeId}-heatmap`,
+      `${beforeId}-raster`,
+      `${beforeId}-symbol`,
+    ];
+    for (const cid of candidates) {
+      if (this.map.getLayer(cid)) return cid;
+    }
+    return undefined;
+  }
+
+  private getSubLayerIds(layerId: string): string[] {
+    const subLayerSuffixes = [
+      "-fill",
+      "-line-bg",
+      "-line",
+      "-extrusion",
+      "-circle",
+      "-heatmap",
+      "-raster",
+      "-symbol",
+    ];
+    return subLayerSuffixes.map((s) => `${layerId}${s}`).filter((id) => this.map.getLayer(id));
+  }
+
+  private reorderLayerSublayers(layerId: string, beforeSublayerId?: string): void {
+    const subLayers = this.getSubLayerIds(layerId);
+    for (const id of subLayers) {
+      if (this.map.getLayer(id)) {
+        try {
+          this.map.moveLayer(id, beforeSublayerId);
+        } catch {
+          // Ignore if moving is unnecessary or fails
+        }
+      }
+    }
+  }
+
   private reconcileLayers(layers: A2MapLayer[]): void {
     const incomingIds = new Set(layers.map((l) => l.id));
 
@@ -292,8 +338,16 @@ export class A2MapReconciler {
       }
     }
 
+    // Sort layers by zIndex (lower zIndex rendered first / underneath)
+    // eslint-disable-next-line unicorn/no-array-sort
+    const sortedLayers = [...layers].sort((a, b) => {
+      const zA = a.zIndex ?? 0;
+      const zB = b.zIndex ?? 0;
+      return zA - zB;
+    });
+
     // Add or update layers
-    for (const layer of layers) {
+    for (const layer of sortedLayers) {
       this.applyLayer(layer);
       this.activeLayerIds.add(layer.id);
       this.activeLayerDefs.set(layer.id, { ...layer });
@@ -333,7 +387,7 @@ export class A2MapReconciler {
         (!prevDef || prevDef.type === layer.type)
       ) {
         (existingSource as GeoJSONSource).setData(sourceData);
-        // Differentially update layer styles and visibility
+        // Differentially update layer styles, visibility, and stacking order
         this.updateMapLibreLayers(layer);
       } else {
         if (!this.map.getSource(sourceId)) {
@@ -353,17 +407,21 @@ export class A2MapReconciler {
           attribution: layer.source.attribution,
         });
 
-        this.map.addLayer({
-          id: `${layer.id}-raster`,
-          type: "raster",
-          source: sourceId,
-          layout: {
-            visibility: layer.visible === false ? "none" : "visible",
+        const beforeSublayerId = this.resolveBeforeSublayerId(layer.beforeId);
+        this.map.addLayer(
+          {
+            id: `${layer.id}-raster`,
+            type: "raster",
+            source: sourceId,
+            layout: {
+              visibility: layer.visible === false ? "none" : "visible",
+            },
+            paint: {
+              "raster-opacity": layer.style?.opacity ?? 1.0,
+            },
           },
-          paint: {
-            "raster-opacity": layer.style?.opacity ?? 1.0,
-          },
-        });
+          beforeSublayerId
+        );
       } else {
         this.updateMapLibreLayers(layer);
       }
@@ -377,136 +435,164 @@ export class A2MapReconciler {
     const strokeWidth = style.strokeWidth || 3.0;
     const opacity = style.opacity ?? 0.4;
     const visibility = layer.visible === false ? "none" : "visible";
+    const beforeSublayerId = this.resolveBeforeSublayerId(layer.beforeId);
 
     switch (layer.type) {
       case "fill": {
+        // Translucent polygon fill (bottom)
+        this.map.addLayer(
+          {
+            id: `${layer.id}-fill`,
+            type: "fill",
+            source: sourceId,
+            layout: { visibility },
+            paint: {
+              "fill-color": baseColor,
+              "fill-opacity": opacity,
+            },
+          },
+          beforeSublayerId
+        );
         // High contrast shadow outline
-        this.map.addLayer({
-          id: `${layer.id}-line-bg`,
-          type: "line",
-          source: sourceId,
-          layout: { visibility },
-          paint: {
-            "line-color": "#000000",
-            "line-width": strokeWidth + 2,
-            "line-opacity": 0.5,
+        this.map.addLayer(
+          {
+            id: `${layer.id}-line-bg`,
+            type: "line",
+            source: sourceId,
+            layout: { visibility },
+            paint: {
+              "line-color": "#000000",
+              "line-width": strokeWidth + 2,
+              "line-opacity": 0.5,
+            },
           },
-        });
-        // Crisp color stroke
-        this.map.addLayer({
-          id: `${layer.id}-line`,
-          type: "line",
-          source: sourceId,
-          layout: { visibility },
-          paint: {
-            "line-color": strokeColor,
-            "line-width": strokeWidth,
-            "line-opacity": 1.0,
+          beforeSublayerId
+        );
+        // Crisp color stroke (top)
+        this.map.addLayer(
+          {
+            id: `${layer.id}-line`,
+            type: "line",
+            source: sourceId,
+            layout: { visibility },
+            paint: {
+              "line-color": strokeColor,
+              "line-width": strokeWidth,
+              "line-opacity": 1.0,
+            },
           },
-        });
-        // Translucent polygon fill
-        this.map.addLayer({
-          id: `${layer.id}-fill`,
-          type: "fill",
-          source: sourceId,
-          layout: { visibility },
-          paint: {
-            "fill-color": baseColor,
-            "fill-opacity": opacity,
-          },
-        });
+          beforeSublayerId
+        );
         break;
       }
 
       case "fill-extrusion": {
-        this.map.addLayer({
-          id: `${layer.id}-extrusion`,
-          type: "fill-extrusion",
-          source: sourceId,
-          layout: { visibility },
-          paint: {
-            "fill-extrusion-color": baseColor,
-            "fill-extrusion-height": style.height || 20,
-            "fill-extrusion-base": style.base || 0,
-            "fill-extrusion-opacity": opacity,
+        this.map.addLayer(
+          {
+            id: `${layer.id}-extrusion`,
+            type: "fill-extrusion",
+            source: sourceId,
+            layout: { visibility },
+            paint: {
+              "fill-extrusion-color": baseColor,
+              "fill-extrusion-height": style.height || 20,
+              "fill-extrusion-base": style.base || 0,
+              "fill-extrusion-opacity": opacity,
+            },
           },
-        });
+          beforeSublayerId
+        );
         break;
       }
 
       case "line": {
-        this.map.addLayer({
-          id: `${layer.id}-line-bg`,
-          type: "line",
-          source: sourceId,
-          layout: { visibility },
-          paint: {
-            "line-color": "#000000",
-            "line-width": strokeWidth + 2,
-            "line-opacity": 0.5,
+        this.map.addLayer(
+          {
+            id: `${layer.id}-line-bg`,
+            type: "line",
+            source: sourceId,
+            layout: { visibility },
+            paint: {
+              "line-color": "#000000",
+              "line-width": strokeWidth + 2,
+              "line-opacity": 0.5,
+            },
           },
-        });
-        this.map.addLayer({
-          id: `${layer.id}-line`,
-          type: "line",
-          source: sourceId,
-          layout: { visibility },
-          paint: {
-            "line-color": strokeColor,
-            "line-width": strokeWidth,
-            "line-opacity": 1.0,
-            ...(style.dashArray ? { "line-dasharray": style.dashArray } : {}),
+          beforeSublayerId
+        );
+        this.map.addLayer(
+          {
+            id: `${layer.id}-line`,
+            type: "line",
+            source: sourceId,
+            layout: { visibility },
+            paint: {
+              "line-color": strokeColor,
+              "line-width": strokeWidth,
+              "line-opacity": 1.0,
+              ...(style.dashArray ? { "line-dasharray": style.dashArray } : {}),
+            },
           },
-        });
+          beforeSublayerId
+        );
         break;
       }
 
       case "circle": {
-        this.map.addLayer({
-          id: `${layer.id}-circle`,
-          type: "circle",
-          source: sourceId,
-          layout: { visibility },
-          paint: {
-            "circle-radius": style.radius || 7,
-            "circle-color": baseColor,
-            "circle-stroke-width": strokeWidth,
-            "circle-stroke-color": strokeColor || "#ffffff",
+        this.map.addLayer(
+          {
+            id: `${layer.id}-circle`,
+            type: "circle",
+            source: sourceId,
+            layout: { visibility },
+            paint: {
+              "circle-radius": style.radius || 7,
+              "circle-color": baseColor,
+              "circle-stroke-width": strokeWidth,
+              "circle-stroke-color": strokeColor || "#ffffff",
+            },
           },
-        });
+          beforeSublayerId
+        );
         break;
       }
 
       case "heatmap": {
-        this.map.addLayer({
-          id: `${layer.id}-heatmap`,
-          type: "heatmap",
-          source: sourceId,
-          layout: { visibility },
-          paint: {
-            "heatmap-radius": style.radius || 25,
-            "heatmap-opacity": opacity,
+        this.map.addLayer(
+          {
+            id: `${layer.id}-heatmap`,
+            type: "heatmap",
+            source: sourceId,
+            layout: { visibility },
+            paint: {
+              "heatmap-radius": style.radius || 25,
+              "heatmap-opacity": opacity,
+            },
           },
-        });
+          beforeSublayerId
+        );
         break;
       }
 
       case "symbol": {
-        this.map.addLayer({
-          id: `${layer.id}-symbol`,
-          type: "symbol",
-          source: sourceId,
-          layout: {
-            visibility,
-            "text-field": style.textField || ["get", "name"],
-            "text-size": style.textSize || 12,
+        this.map.addLayer(
+          {
+            id: `${layer.id}-symbol`,
+            type: "symbol",
+            source: sourceId,
+            layout: {
+              visibility,
+              "text-field": style.textField || ["get", "name"],
+              "text-size": style.textSize || 12,
+            },
+            paint: {
+              "text-color": style.textColor || "#ffffff",
+              "text-halo-color": style.textHaloColor || "#000000",
+              "text-halo-width": style.textHaloWidth || 1.5,
+            },
           },
-          paint: {
-            "text-color": style.textColor || "#ffffff",
-            "text-halo-color": style.textHaloColor || "#000000",
-            "text-halo-width": style.textHaloWidth || 1.5,
-          },
-        });
+          beforeSublayerId
+        );
         break;
       }
     }
@@ -519,6 +605,12 @@ export class A2MapReconciler {
     const strokeWidth = style.strokeWidth || 3.0;
     const opacity = style.opacity ?? 0.4;
     const visibility = layer.visible === false ? "none" : "visible";
+
+    const prevDef = this.activeLayerDefs.get(layer.id);
+    if (layer.beforeId !== undefined && prevDef?.beforeId !== layer.beforeId) {
+      const beforeSublayerId = this.resolveBeforeSublayerId(layer.beforeId);
+      this.reorderLayerSublayers(layer.id, beforeSublayerId);
+    }
 
     const updateVisibility = (id: string) => {
       if (this.map.getLayer(id)) {
