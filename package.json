@@ -1,6 +1,6 @@
 {
   "name": "a2map",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Agent-to-Map (A2Map) Protocol, Controller and Differential Renderer for MapLibre GL JS",
   "keywords": [
     "a2map",
@@ -12,7 +12,16 @@
     "maplibre",
     "maplibre-gl"
   ],
+  "homepage": "https://github.com/tatsuyayamauchi/a2map#readme",
+  "bugs": {
+    "url": "https://github.com/tatsuyayamauchi/a2map/issues"
+  },
   "license": "Apache-2.0",
+  "author": "Tatsuya Yamauchi",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tatsuyayamauchi/a2map.git"
+  },
   "files": [
     "dist",
     "schema"
@@ -31,8 +40,12 @@
     "./style.css": "./dist/a2map.css",
     "./dist/a2map.css": "./dist/a2map.css"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "vite",
+    "prepublishOnly": "pnpm build",
     "build": "tsc && node -e \"fs.copyFileSync('src/a2map.css', 'dist/a2map.css')\" && pnpm schema:export",
     "schema:export": "node scripts/export-schema.mjs",
     "test": "vitest run",
