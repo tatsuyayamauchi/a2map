@@ -10,15 +10,26 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v3
-        with:
-          version: 9
+      - name: Get versions
+        id: version
+        shell: bash
+        run: |
+          node_version=$(cat .tool-versions | grep nodejs | awk '{print $2}')
+          pnpm_version=$(cat .tool-versions | grep pnpm | awk '{print $2}')
+          echo "NODE_VERSION=$node_version" >> $GITHUB_OUTPUT
+          echo "PNPM_VERSION=$pnpm_version" >> $GITHUB_OUTPUT
 
-      - uses: actions/setup-node@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
         with:
-          node-version: 20
+          version: ${{ steps.version.outputs.PNPM_VERSION }}
+
+      - name: Use Node.js ${{ steps.version.outputs.NODE_VERSION }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ steps.version.outputs.NODE_VERSION }}
           cache: "pnpm"
 
       - run: pnpm install --frozen-lockfile
