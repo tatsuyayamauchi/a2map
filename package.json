@@ -1,0 +1,32 @@
+{
+  "name": "a2map",
+  "version": "1.0.0",
+  "description": "Agent-to-Map (A2Map) Protocol, Controller and Differential Renderer for MapLibre GL JS",
+  "keywords": [
+    "a2map",
+    "a2ui",
+    "agentic-ai",
+    "declarative-map",
+    "generative-ui",
+    "geospatial",
+    "maplibre",
+    "maplibre-gl"
+  ],
+  "license": "Apache-2.0",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "@types/geojson": "^7946.0.16",
+    "@types/react": "^19.0.10",
+    "typescript": "^5.8.2"
+  },
+  "peerDependencies": {
+    "maplibre-gl": "^5.0.0 || ^6.0.0",
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  }
+}
