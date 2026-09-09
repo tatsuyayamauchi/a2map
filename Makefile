@@ -20,8 +20,11 @@ dev: ## Run development servers
 build: ## Build
 	pnpm build
 
-typecheck: ## Run TypeScript type checking for client and server
+typecheck: ## Run TypeScript type checking
 	pnpm typecheck
+
+test: ## Run unit tests with vitest
+	pnpm test
 
 lint: ## Run linter (oxlint)
 	pnpm lint

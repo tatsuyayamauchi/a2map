@@ -11,3 +11,4 @@ export * from "./reconciler.js";
 export * from "./widgets.js";
 export * from "./stream.js";
 export * from "./react.js";
+export * from "./sanitize.js";

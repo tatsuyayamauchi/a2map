@@ -1,11 +1,14 @@
 import { Marker, Popup, type Map as MapLibreMap } from "maplibre-gl";
 import type { A2MapMarker, A2MapPopup, A2MapEvent } from "./types.js";
+import { escapeHtml, sanitizeHtml } from "./sanitize.js";
 
 export class A2MapOverlayManager {
   private map: MapLibreMap;
   private onEvent: (event: A2MapEvent) => void;
   private activeMarkers = new Map<string, Marker>();
+  private activeMarkerDefs = new Map<string, A2MapMarker>();
   private activePopups = new Map<string, Popup>();
+  private activePopupDefs = new Map<string, A2MapPopup>();
   private hoverPopup: Popup | null = null;
 
   constructor(map: MapLibreMap, onEvent: (event: A2MapEvent) => void) {
@@ -21,66 +24,126 @@ export class A2MapOverlayManager {
       if (!incomingIds.has(id)) {
         marker.remove();
         this.activeMarkers.delete(id);
+        this.activeMarkerDefs.delete(id);
       }
     }
 
     // Add or update markers
     for (const markerDef of markers) {
-      let marker = this.activeMarkers.get(markerDef.id);
+      const existingMarker = this.activeMarkers.get(markerDef.id);
+      const prevDef = this.activeMarkerDefs.get(markerDef.id);
 
-      if (!marker) {
-        let el = markerDef.element;
-        if (!el && markerDef.label) {
-          el = document.createElement("div");
-          el.className = "a2map-custom-marker";
-          el.innerHTML = `
-            <div class="a2map-marker-pin" style="background-color: ${markerDef.color || "#3b82f6"}">
-              ${markerDef.icon ? `<span>${markerDef.icon}</span>` : ""}
-            </div>
-            <div class="a2map-marker-label">${markerDef.label}</div>
-          `;
-        }
-
-        marker = new Marker({
-          element: el,
-          color: markerDef.color || "#3b82f6",
-          draggable: markerDef.draggable ?? false,
-        })
-          .setLngLat(markerDef.coordinates)
-          .addTo(this.map);
-
-        if (markerDef.popupHtml) {
-          const popup = new Popup({ offset: 25 }).setHTML(markerDef.popupHtml);
-          marker.setPopup(popup);
-        }
-
-        if (markerDef.draggable) {
-          marker.on("dragend", () => {
-            const lngLat = marker?.getLngLat();
-            if (lngLat) {
-              this.onEvent({
-                type: "marker_drag_end",
-                markerId: markerDef.id,
-                coordinates: [Number(lngLat.lng.toFixed(5)), Number(lngLat.lat.toFixed(5))],
-              });
-            }
-          });
-        }
-
-        const markerEl = marker.getElement();
-        markerEl.addEventListener("click", () => {
-          this.onEvent({
-            type: "marker_click",
-            markerId: markerDef.id,
-            coordinates: markerDef.coordinates,
-          });
-        });
-
+      if (!existingMarker) {
+        const marker = this.createMarker(markerDef);
         this.activeMarkers.set(markerDef.id, marker);
+        this.activeMarkerDefs.set(markerDef.id, { ...markerDef });
       } else {
-        marker.setLngLat(markerDef.coordinates);
+        // Update coordinates
+        if (
+          !prevDef ||
+          prevDef.coordinates[0] !== markerDef.coordinates[0] ||
+          prevDef.coordinates[1] !== markerDef.coordinates[1]
+        ) {
+          existingMarker.setLngLat(markerDef.coordinates);
+        }
+
+        // Check if visuals or properties changed
+        const visualsChanged =
+          !prevDef ||
+          prevDef.color !== markerDef.color ||
+          prevDef.label !== markerDef.label ||
+          prevDef.icon !== markerDef.icon ||
+          prevDef.element !== markerDef.element;
+
+        if (visualsChanged) {
+          // Re-create marker for visual style changes to guarantee consistent DOM/SVG state
+          existingMarker.remove();
+          const newMarker = this.createMarker(markerDef);
+          this.activeMarkers.set(markerDef.id, newMarker);
+        } else {
+          // Update draggable
+          if (prevDef?.draggable !== markerDef.draggable) {
+            existingMarker.setDraggable(markerDef.draggable ?? false);
+          }
+
+          // Update popup
+          if (prevDef?.popupHtml !== markerDef.popupHtml) {
+            if (markerDef.popupHtml) {
+              const sanitizedPopup = sanitizeHtml(markerDef.popupHtml);
+              const existingPopup = existingMarker.getPopup();
+              if (existingPopup) {
+                existingPopup.setHTML(sanitizedPopup);
+              } else {
+                existingMarker.setPopup(new Popup({ offset: 25 }).setHTML(sanitizedPopup));
+              }
+            } else {
+              const existingPopup = existingMarker.getPopup();
+              if (existingPopup) {
+                existingPopup.remove();
+              }
+            }
+          }
+        }
+
+        this.activeMarkerDefs.set(markerDef.id, { ...markerDef });
       }
     }
+  }
+
+  private createMarker(markerDef: A2MapMarker): Marker {
+    let el = markerDef.element;
+    if (!el && markerDef.label) {
+      el = document.createElement("div");
+      el.className = "a2map-custom-marker";
+      const sanitizedColor = escapeHtml(markerDef.color || "#3b82f6");
+      const iconSpan = markerDef.icon ? `<span>${escapeHtml(markerDef.icon)}</span>` : "";
+      const labelSpan = escapeHtml(markerDef.label);
+
+      el.innerHTML = `
+        <div class="a2map-marker-pin" style="background-color: ${sanitizedColor}">
+          ${iconSpan}
+        </div>
+        <div class="a2map-marker-label">${labelSpan}</div>
+      `;
+    }
+
+    const marker = new Marker({
+      element: el,
+      color: markerDef.color || "#3b82f6",
+      draggable: markerDef.draggable ?? false,
+    })
+      .setLngLat(markerDef.coordinates)
+      .addTo(this.map);
+
+    if (markerDef.popupHtml) {
+      const sanitizedPopup = sanitizeHtml(markerDef.popupHtml);
+      const popup = new Popup({ offset: 25 }).setHTML(sanitizedPopup);
+      marker.setPopup(popup);
+    }
+
+    if (markerDef.draggable) {
+      marker.on("dragend", () => {
+        const lngLat = marker?.getLngLat();
+        if (lngLat) {
+          this.onEvent({
+            type: "marker_drag_end",
+            markerId: markerDef.id,
+            coordinates: [Number(lngLat.lng.toFixed(5)), Number(lngLat.lat.toFixed(5))],
+          });
+        }
+      });
+    }
+
+    const markerEl = marker.getElement();
+    markerEl.addEventListener("click", () => {
+      this.onEvent({
+        type: "marker_click",
+        markerId: markerDef.id,
+        coordinates: markerDef.coordinates,
+      });
+    });
+
+    return marker;
   }
 
   public reconcilePopups(popups: A2MapPopup[] = []): void {
@@ -91,12 +154,16 @@ export class A2MapOverlayManager {
       if (!incomingIds.has(id)) {
         popup.remove();
         this.activePopups.delete(id);
+        this.activePopupDefs.delete(id);
       }
     }
 
     // Add or update popups
     for (const popupDef of popups) {
       let popup = this.activePopups.get(popupDef.id);
+      const prevDef = this.activePopupDefs.get(popupDef.id);
+      const sanitizedContent = sanitizeHtml(popupDef.content);
+
       if (!popup) {
         popup = new Popup({
           closeButton: popupDef.closeButton ?? true,
@@ -104,14 +171,23 @@ export class A2MapOverlayManager {
           maxWidth: popupDef.maxWidth || "320px",
         })
           .setLngLat(popupDef.coordinates)
-          .setHTML(popupDef.content)
+          .setHTML(sanitizedContent)
           .addTo(this.map);
 
         this.activePopups.set(popupDef.id, popup);
       } else {
-        popup.setLngLat(popupDef.coordinates);
-        popup.setHTML(popupDef.content);
+        if (
+          !prevDef ||
+          prevDef.coordinates[0] !== popupDef.coordinates[0] ||
+          prevDef.coordinates[1] !== popupDef.coordinates[1]
+        ) {
+          popup.setLngLat(popupDef.coordinates);
+        }
+        if (!prevDef || prevDef.content !== popupDef.content) {
+          popup.setHTML(sanitizedContent);
+        }
       }
+      this.activePopupDefs.set(popupDef.id, { ...popupDef });
     }
   }
 
@@ -123,6 +199,7 @@ export class A2MapOverlayManager {
         className: "a2map-hover-tooltip",
       });
     }
+    // Content is pre-sanitized before passing to showTooltip
     this.hoverPopup.setLngLat(coordinates).setHTML(html).addTo(this.map);
   }
 
@@ -137,11 +214,13 @@ export class A2MapOverlayManager {
       m.remove();
     }
     this.activeMarkers.clear();
+    this.activeMarkerDefs.clear();
 
     for (const p of this.activePopups.values()) {
       p.remove();
     }
     this.activePopups.clear();
+    this.activePopupDefs.clear();
 
     if (this.hoverPopup) {
       this.hoverPopup.remove();

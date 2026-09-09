@@ -15,6 +15,7 @@ import {
 import type { A2MapSpec, A2MapLayer, A2MapEvent } from "./types.js";
 import { resolveBaseStyle } from "./constants.js";
 import { A2MapOverlayManager } from "./markers.js";
+import { escapeHtml } from "./sanitize.js";
 
 export type A2MapEventListener = (event: A2MapEvent) => void;
 
@@ -26,6 +27,7 @@ export class A2MapReconciler {
   private map: MapLibreMap;
   private currentSpec: A2MapSpec | null = null;
   private activeLayerIds = new Set<string>();
+  private activeLayerDefs = new Map<string, A2MapLayer>();
   private onEvent: A2MapEventListener;
   private overlayManager: A2MapOverlayManager;
   private activeControls = new Map<string, IControl>();
@@ -59,6 +61,7 @@ export class A2MapReconciler {
     ) {
       const resolvedStyle = resolveBaseStyle(nextSpec.canvas.baseStyle);
       this.activeLayerIds.clear();
+      this.activeLayerDefs.clear();
       this.map.setStyle(resolvedStyle as never);
       this.map.once("style.load", () => {
         this.applyPostStyleReconcile(nextSpec);
@@ -285,6 +288,7 @@ export class A2MapReconciler {
       if (!incomingIds.has(oldId)) {
         this.removeLayerGroup(oldId);
         this.activeLayerIds.delete(oldId);
+        this.activeLayerDefs.delete(oldId);
       }
     }
 
@@ -292,12 +296,19 @@ export class A2MapReconciler {
     for (const layer of layers) {
       this.applyLayer(layer);
       this.activeLayerIds.add(layer.id);
+      this.activeLayerDefs.set(layer.id, { ...layer });
     }
   }
 
   private applyLayer(layer: A2MapLayer): void {
     const sourceId = `a2map-src-${layer.id}`;
     const existingSource = this.map.getSource(sourceId);
+    const prevDef = this.activeLayerDefs.get(layer.id);
+
+    // If layer type changed, remove old layers first to recreate cleanly
+    if (prevDef && prevDef.type !== layer.type) {
+      this.removeLayerGroup(layer.id);
+    }
 
     if (layer.source.type === "geojson" && layer.source.data) {
       const sourceData: GeoJSON.FeatureCollection =
@@ -316,13 +327,21 @@ export class A2MapReconciler {
               ],
             };
 
-      if (existingSource && "setData" in existingSource) {
+      if (
+        existingSource &&
+        "setData" in existingSource &&
+        (!prevDef || prevDef.type === layer.type)
+      ) {
         (existingSource as GeoJSONSource).setData(sourceData);
+        // Differentially update layer styles and visibility
+        this.updateMapLibreLayers(layer);
       } else {
-        this.map.addSource(sourceId, {
-          type: "geojson",
-          data: sourceData,
-        });
+        if (!this.map.getSource(sourceId)) {
+          this.map.addSource(sourceId, {
+            type: "geojson",
+            data: sourceData,
+          });
+        }
         this.createMapLibreLayers(sourceId, layer);
       }
     } else if (layer.source.type === "raster" && layer.source.tiles) {
@@ -338,10 +357,15 @@ export class A2MapReconciler {
           id: `${layer.id}-raster`,
           type: "raster",
           source: sourceId,
+          layout: {
+            visibility: layer.visible === false ? "none" : "visible",
+          },
           paint: {
             "raster-opacity": layer.style?.opacity ?? 1.0,
           },
         });
+      } else {
+        this.updateMapLibreLayers(layer);
       }
     }
   }
@@ -352,6 +376,7 @@ export class A2MapReconciler {
     const strokeColor = style.strokeColor || baseColor;
     const strokeWidth = style.strokeWidth || 3.0;
     const opacity = style.opacity ?? 0.4;
+    const visibility = layer.visible === false ? "none" : "visible";
 
     switch (layer.type) {
       case "fill": {
@@ -360,6 +385,7 @@ export class A2MapReconciler {
           id: `${layer.id}-line-bg`,
           type: "line",
           source: sourceId,
+          layout: { visibility },
           paint: {
             "line-color": "#000000",
             "line-width": strokeWidth + 2,
@@ -371,6 +397,7 @@ export class A2MapReconciler {
           id: `${layer.id}-line`,
           type: "line",
           source: sourceId,
+          layout: { visibility },
           paint: {
             "line-color": strokeColor,
             "line-width": strokeWidth,
@@ -382,6 +409,7 @@ export class A2MapReconciler {
           id: `${layer.id}-fill`,
           type: "fill",
           source: sourceId,
+          layout: { visibility },
           paint: {
             "fill-color": baseColor,
             "fill-opacity": opacity,
@@ -395,6 +423,7 @@ export class A2MapReconciler {
           id: `${layer.id}-extrusion`,
           type: "fill-extrusion",
           source: sourceId,
+          layout: { visibility },
           paint: {
             "fill-extrusion-color": baseColor,
             "fill-extrusion-height": style.height || 20,
@@ -410,6 +439,7 @@ export class A2MapReconciler {
           id: `${layer.id}-line-bg`,
           type: "line",
           source: sourceId,
+          layout: { visibility },
           paint: {
             "line-color": "#000000",
             "line-width": strokeWidth + 2,
@@ -420,6 +450,7 @@ export class A2MapReconciler {
           id: `${layer.id}-line`,
           type: "line",
           source: sourceId,
+          layout: { visibility },
           paint: {
             "line-color": strokeColor,
             "line-width": strokeWidth,
@@ -435,6 +466,7 @@ export class A2MapReconciler {
           id: `${layer.id}-circle`,
           type: "circle",
           source: sourceId,
+          layout: { visibility },
           paint: {
             "circle-radius": style.radius || 7,
             "circle-color": baseColor,
@@ -450,6 +482,7 @@ export class A2MapReconciler {
           id: `${layer.id}-heatmap`,
           type: "heatmap",
           source: sourceId,
+          layout: { visibility },
           paint: {
             "heatmap-radius": style.radius || 25,
             "heatmap-opacity": opacity,
@@ -464,6 +497,7 @@ export class A2MapReconciler {
           type: "symbol",
           source: sourceId,
           layout: {
+            visibility,
             "text-field": style.textField || ["get", "name"],
             "text-size": style.textSize || 12,
           },
@@ -473,6 +507,122 @@ export class A2MapReconciler {
             "text-halo-width": style.textHaloWidth || 1.5,
           },
         });
+        break;
+      }
+    }
+  }
+
+  private updateMapLibreLayers(layer: A2MapLayer): void {
+    const style = layer.style || {};
+    const baseColor = style.color || "#3b82f6";
+    const strokeColor = style.strokeColor || baseColor;
+    const strokeWidth = style.strokeWidth || 3.0;
+    const opacity = style.opacity ?? 0.4;
+    const visibility = layer.visible === false ? "none" : "visible";
+
+    const updateVisibility = (id: string) => {
+      if (this.map.getLayer(id)) {
+        this.map.setLayoutProperty(id, "visibility", visibility);
+      }
+    };
+
+    switch (layer.type) {
+      case "fill": {
+        const bgId = `${layer.id}-line-bg`;
+        const lineId = `${layer.id}-line`;
+        const fillId = `${layer.id}-fill`;
+
+        updateVisibility(bgId);
+        updateVisibility(lineId);
+        updateVisibility(fillId);
+
+        if (this.map.getLayer(bgId)) {
+          this.map.setPaintProperty(bgId, "line-width", strokeWidth + 2);
+        }
+        if (this.map.getLayer(lineId)) {
+          this.map.setPaintProperty(lineId, "line-color", strokeColor);
+          this.map.setPaintProperty(lineId, "line-width", strokeWidth);
+        }
+        if (this.map.getLayer(fillId)) {
+          this.map.setPaintProperty(fillId, "fill-color", baseColor);
+          this.map.setPaintProperty(fillId, "fill-opacity", opacity);
+        }
+        break;
+      }
+
+      case "fill-extrusion": {
+        const id = `${layer.id}-extrusion`;
+        updateVisibility(id);
+        if (this.map.getLayer(id)) {
+          this.map.setPaintProperty(id, "fill-extrusion-color", baseColor);
+          this.map.setPaintProperty(id, "fill-extrusion-height", style.height || 20);
+          this.map.setPaintProperty(id, "fill-extrusion-base", style.base || 0);
+          this.map.setPaintProperty(id, "fill-extrusion-opacity", opacity);
+        }
+        break;
+      }
+
+      case "line": {
+        const bgId = `${layer.id}-line-bg`;
+        const lineId = `${layer.id}-line`;
+
+        updateVisibility(bgId);
+        updateVisibility(lineId);
+
+        if (this.map.getLayer(bgId)) {
+          this.map.setPaintProperty(bgId, "line-width", strokeWidth + 2);
+        }
+        if (this.map.getLayer(lineId)) {
+          this.map.setPaintProperty(lineId, "line-color", strokeColor);
+          this.map.setPaintProperty(lineId, "line-width", strokeWidth);
+          if (style.dashArray) {
+            this.map.setPaintProperty(lineId, "line-dasharray", style.dashArray);
+          }
+        }
+        break;
+      }
+
+      case "circle": {
+        const id = `${layer.id}-circle`;
+        updateVisibility(id);
+        if (this.map.getLayer(id)) {
+          this.map.setPaintProperty(id, "circle-radius", style.radius || 7);
+          this.map.setPaintProperty(id, "circle-color", baseColor);
+          this.map.setPaintProperty(id, "circle-stroke-width", strokeWidth);
+          this.map.setPaintProperty(id, "circle-stroke-color", strokeColor || "#ffffff");
+        }
+        break;
+      }
+
+      case "heatmap": {
+        const id = `${layer.id}-heatmap`;
+        updateVisibility(id);
+        if (this.map.getLayer(id)) {
+          this.map.setPaintProperty(id, "heatmap-radius", style.radius || 25);
+          this.map.setPaintProperty(id, "heatmap-opacity", opacity);
+        }
+        break;
+      }
+
+      case "symbol": {
+        const id = `${layer.id}-symbol`;
+        updateVisibility(id);
+        if (this.map.getLayer(id)) {
+          this.map.setLayoutProperty(id, "text-field", style.textField || ["get", "name"]);
+          this.map.setLayoutProperty(id, "text-size", style.textSize || 12);
+          this.map.setPaintProperty(id, "text-color", style.textColor || "#ffffff");
+          this.map.setPaintProperty(id, "text-halo-color", style.textHaloColor || "#000000");
+          this.map.setPaintProperty(id, "text-halo-width", style.textHaloWidth || 1.5);
+        }
+        break;
+      }
+
+      case "raster": {
+        const id = `${layer.id}-raster`;
+        updateVisibility(id);
+        if (this.map.getLayer(id)) {
+          this.map.setPaintProperty(id, "raster-opacity", style.opacity ?? 1.0);
+        }
         break;
       }
     }
@@ -538,12 +688,12 @@ export class A2MapReconciler {
           const props = top.properties || {};
           let html = `<div class="a2map-tooltip-content">`;
           if (matchedLayer.tooltip.title) {
-            html += `<div class="a2map-tooltip-title">${matchedLayer.tooltip.title}</div>`;
+            html += `<div class="a2map-tooltip-title">${escapeHtml(matchedLayer.tooltip.title)}</div>`;
           }
           if (matchedLayer.tooltip.fields) {
             for (const key of matchedLayer.tooltip.fields) {
               if (props[key] !== undefined) {
-                html += `<div><strong>${key}:</strong> ${props[key]}</div>`;
+                html += `<div><strong>${escapeHtml(key)}:</strong> ${escapeHtml(props[key])}</div>`;
               }
             }
           }
@@ -591,6 +741,7 @@ export class A2MapReconciler {
       this.removeLayerGroup(layerId);
     }
     this.activeLayerIds.clear();
+    this.activeLayerDefs.clear();
 
     this.overlayManager.destroy();
   }
