@@ -12,5 +12,11 @@
     "no-await-in-loop": "off",
     "react/set-state-in-effect": "warn"
   },
-  "ignorePatterns": ["dist/**", "dist-server/**", "node_modules/**", "storybook-static/**"]
+  "ignorePatterns": [
+    "dist/**",
+    "dist-server/**",
+    "node_modules/**",
+    "storybook-static/**",
+    "schema/**"
+  ]
 }
