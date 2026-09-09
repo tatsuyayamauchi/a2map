@@ -1,5 +1,5 @@
 {
-  "name": "a2map",
+  "name": "@tatsuyayamauchi/a2map",
   "version": "0.1.0",
   "description": "Agent-to-Map (A2Map) Protocol, Controller and Differential Renderer for MapLibre GL JS",
   "keywords": [
