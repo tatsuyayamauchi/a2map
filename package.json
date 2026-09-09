@@ -42,6 +42,7 @@
     "build-storybook": "storybook build"
   },
   "dependencies": {
+    "pmtiles": "^4.5.0",
     "zod": "^4.5.4"
   },
   "devDependencies": {

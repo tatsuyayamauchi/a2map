@@ -170,4 +170,99 @@ describe("A2MapReconciler - Layer Ordering and Differential Updates", () => {
     expect(mockMap.setPaintProperty).toHaveBeenCalledWith("poly-fill", "fill-color", "#00ff00");
     expect(mockMap.setPaintProperty).toHaveBeenCalledWith("poly-fill", "fill-opacity", 0.9);
   });
+
+  it("adds PMTiles vector source and applies sourceLayer to sublayers", () => {
+    const mockMap = createMockMap();
+    const reconciler = new A2MapReconciler(mockMap as never, () => {});
+
+    reconciler.reconcile({
+      version: "1.0",
+      layers: [
+        {
+          id: "parcels",
+          type: "fill",
+          sourceLayer: "cadastre",
+          source: {
+            type: "pmtiles",
+            url: "https://example.com/tiles/parcels.pmtiles",
+          },
+        },
+      ],
+    });
+
+    expect(mockMap.addSource).toHaveBeenCalledWith(
+      "a2map-src-parcels",
+      expect.objectContaining({
+        type: "vector",
+        url: "pmtiles://https://example.com/tiles/parcels.pmtiles",
+      })
+    );
+
+    const fillCall = mockMap.addLayer.mock.calls.find((c) => c[0].id === "parcels-fill");
+    expect(fillCall).toBeDefined();
+    expect(fillCall[0]["source-layer"]).toBe("cadastre");
+  });
+
+  it("configures GeoJSON clustering and adds cluster circle, count, and unclustered layers", () => {
+    const mockMap = createMockMap();
+    const reconciler = new A2MapReconciler(mockMap as never, () => {});
+
+    reconciler.reconcile({
+      version: "1.0",
+      layers: [
+        {
+          id: "points",
+          type: "circle",
+          source: {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] },
+            cluster: true,
+            clusterRadius: 60,
+            clusterMaxZoom: 13,
+          },
+          clusterStyle: {
+            radius: 20,
+            textColor: "#ffffff",
+          },
+        },
+      ],
+    });
+
+    expect(mockMap.addSource).toHaveBeenCalledWith(
+      "a2map-src-points",
+      expect.objectContaining({
+        type: "geojson",
+        cluster: true,
+        clusterRadius: 60,
+        clusterMaxZoom: 13,
+      })
+    );
+
+    expect(mockMap.addLayer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "points-clusters",
+        type: "circle",
+        filter: ["has", "point_count"],
+      }),
+      undefined
+    );
+
+    expect(mockMap.addLayer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "points-cluster-count",
+        type: "symbol",
+        filter: ["has", "point_count"],
+      }),
+      undefined
+    );
+
+    expect(mockMap.addLayer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "points-unclustered-point",
+        type: "circle",
+        filter: ["!", ["has", "point_count"]],
+      }),
+      undefined
+    );
+  });
 });

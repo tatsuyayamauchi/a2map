@@ -14,3 +14,4 @@ export * from "./react.js";
 export * from "./sanitize.js";
 export * from "./schema.js";
 export * from "./tools.js";
+export * from "./spatial.js";

@@ -11,13 +11,31 @@ import {
   FullscreenControl,
   GeolocateControl,
   AttributionControl,
+  addProtocol,
 } from "maplibre-gl";
+import { Protocol as PMTilesProtocol } from "pmtiles";
 import type { A2MapSpec, A2MapLayer, A2MapEvent } from "./types.js";
 import { resolveBaseStyle } from "./constants.js";
 import { A2MapOverlayManager } from "./markers.js";
 import { escapeHtml } from "./sanitize.js";
 
 export type A2MapEventListener = (event: A2MapEvent) => void;
+
+let pmtilesProtocolRegistered = false;
+let pmtilesProtocolInstance: PMTilesProtocol | null = null;
+
+export function ensurePMTilesProtocol(): PMTilesProtocol {
+  if (!pmtilesProtocolRegistered) {
+    try {
+      pmtilesProtocolInstance = new PMTilesProtocol();
+      addProtocol("pmtiles", pmtilesProtocolInstance.tile);
+      pmtilesProtocolRegistered = true;
+    } catch {
+      // Ignore if already registered or in mock environment
+    }
+  }
+  return pmtilesProtocolInstance!;
+}
 
 /**
  * A2MapReconciler:
@@ -31,6 +49,7 @@ export class A2MapReconciler {
   private onEvent: A2MapEventListener;
   private overlayManager: A2MapOverlayManager;
   private activeControls = new Map<string, IControl>();
+  private lineAnimationFrames = new Map<string, number>();
 
   constructor(map: MapLibreMap, onEvent: A2MapEventListener) {
     this.map = map;
@@ -292,11 +311,46 @@ export class A2MapReconciler {
       `${beforeId}-heatmap`,
       `${beforeId}-raster`,
       `${beforeId}-symbol`,
+      `${beforeId}-clusters`,
+      `${beforeId}-cluster-count`,
+      `${beforeId}-unclustered-point`,
     ];
     for (const cid of candidates) {
       if (this.map.getLayer(cid)) return cid;
     }
     return undefined;
+  }
+
+  private cancelLineAnimation(layerId: string): void {
+    const frame = this.lineAnimationFrames.get(layerId);
+    if (frame !== undefined && typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(frame);
+      this.lineAnimationFrames.delete(layerId);
+    }
+  }
+
+  private startLineDashAnimation(layerId: string): void {
+    this.cancelLineAnimation(layerId);
+    const lineId = `${layerId}-line`;
+    if (!this.map.getLayer(lineId) || typeof requestAnimationFrame !== "function") return;
+
+    let stepCount = 0;
+    const animate = () => {
+      if (!this.map.getLayer(lineId)) {
+        this.lineAnimationFrames.delete(layerId);
+        return;
+      }
+      stepCount = (stepCount + 1) % 16;
+      const dash1 = stepCount / 2;
+      const dash2 = 8 - dash1;
+      try {
+        this.map.setPaintProperty(lineId, "line-dasharray", [dash1, dash2, 4, 4]);
+      } catch {
+        // ignore in case layer is being removed
+      }
+      this.lineAnimationFrames.set(layerId, requestAnimationFrame(animate));
+    };
+    this.lineAnimationFrames.set(layerId, requestAnimationFrame(animate));
   }
 
   private getSubLayerIds(layerId: string): string[] {
@@ -309,6 +363,9 @@ export class A2MapReconciler {
       "-heatmap",
       "-raster",
       "-symbol",
+      "-clusters",
+      "-cluster-count",
+      "-unclustered-point",
     ];
     return subLayerSuffixes.map((s) => `${layerId}${s}`).filter((id) => this.map.getLayer(id));
   }
@@ -364,7 +421,24 @@ export class A2MapReconciler {
       this.removeLayerGroup(layer.id);
     }
 
-    if (layer.source.type === "geojson" && layer.source.data) {
+    if (layer.source.type === "pmtiles" || layer.source.type === "vector") {
+      ensurePMTilesProtocol();
+      let sourceUrl = layer.source.url || "";
+      if (layer.source.type === "pmtiles" && !sourceUrl.startsWith("pmtiles://")) {
+        sourceUrl = `pmtiles://${sourceUrl}`;
+      }
+
+      if (!existingSource) {
+        this.map.addSource(sourceId, {
+          type: "vector",
+          url: sourceUrl,
+          attribution: layer.source.attribution,
+        });
+        this.createMapLibreLayers(sourceId, layer);
+      } else {
+        this.updateMapLibreLayers(layer);
+      }
+    } else if (layer.source.type === "geojson" && layer.source.data) {
       const sourceData: GeoJSON.FeatureCollection =
         layer.source.data.type === "FeatureCollection"
           ? (layer.source.data as GeoJSON.FeatureCollection)
@@ -394,6 +468,13 @@ export class A2MapReconciler {
           this.map.addSource(sourceId, {
             type: "geojson",
             data: sourceData,
+            ...(layer.source.cluster
+              ? {
+                  cluster: true,
+                  clusterMaxZoom: layer.source.clusterMaxZoom ?? 14,
+                  clusterRadius: layer.source.clusterRadius ?? 50,
+                }
+              : {}),
           });
         }
         this.createMapLibreLayers(sourceId, layer);
@@ -428,6 +509,41 @@ export class A2MapReconciler {
     }
   }
 
+  private setupClusterInteraction(layerId: string, sourceId: string): void {
+    const clusterLayerId = `${layerId}-clusters`;
+    this.map.on("click", clusterLayerId, (e: MapMouseEvent) => {
+      const features = this.map.queryRenderedFeatures(e.point, { layers: [clusterLayerId] });
+      const clusterId = features[0]?.properties?.cluster_id;
+      const source = this.map.getSource(sourceId) as GeoJSONSource;
+      if (
+        source &&
+        typeof source.getClusterExpansionZoom === "function" &&
+        clusterId !== undefined
+      ) {
+        Promise.resolve(source.getClusterExpansionZoom(clusterId))
+          .then((zoom) => {
+            if (typeof zoom === "number") {
+              const coords = (features[0].geometry as GeoJSON.Point).coordinates as [
+                number,
+                number,
+              ];
+              this.map.easeTo({ center: coords, zoom });
+            }
+          })
+          .catch(() => {
+            // ignore error
+          });
+      }
+    });
+
+    this.map.on("mouseenter", clusterLayerId, () => {
+      this.map.getCanvas().style.cursor = "pointer";
+    });
+    this.map.on("mouseleave", clusterLayerId, () => {
+      this.map.getCanvas().style.cursor = "";
+    });
+  }
+
   private createMapLibreLayers(sourceId: string, layer: A2MapLayer): void {
     const style = layer.style || {};
     const baseColor = style.color || "#3b82f6";
@@ -436,6 +552,88 @@ export class A2MapReconciler {
     const opacity = style.opacity ?? 0.4;
     const visibility = layer.visible === false ? "none" : "visible";
     const beforeSublayerId = this.resolveBeforeSublayerId(layer.beforeId);
+    const sourceLayerOpt = layer.sourceLayer ? { "source-layer": layer.sourceLayer } : {};
+
+    // Point clustering sublayers
+    if (layer.source.cluster) {
+      const clusterColors = layer.clusterStyle?.colors || [
+        { count: 100, color: "#ef4444" },
+        { count: 20, color: "#f59e0b" },
+        { count: 0, color: "#3b82f6" },
+      ];
+      const radius = layer.clusterStyle?.radius ?? 18;
+
+      this.map.addLayer(
+        {
+          id: `${layer.id}-clusters`,
+          type: "circle",
+          source: sourceId,
+          filter: ["has", "point_count"],
+          layout: { visibility },
+          paint: {
+            "circle-color": [
+              "step",
+              ["get", "point_count"],
+              clusterColors[2]?.color || "#3b82f6",
+              20,
+              clusterColors[1]?.color || "#f59e0b",
+              100,
+              clusterColors[0]?.color || "#ef4444",
+            ],
+            "circle-radius": [
+              "step",
+              ["get", "point_count"],
+              radius,
+              20,
+              radius + 6,
+              100,
+              radius + 12,
+            ],
+            "circle-stroke-width": 2,
+            "circle-stroke-color": "#ffffff",
+          },
+        },
+        beforeSublayerId
+      );
+
+      this.map.addLayer(
+        {
+          id: `${layer.id}-cluster-count`,
+          type: "symbol",
+          source: sourceId,
+          filter: ["has", "point_count"],
+          layout: {
+            visibility,
+            "text-field": "{point_count_abbreviated}",
+            "text-size": 12,
+          },
+          paint: {
+            "text-color": layer.clusterStyle?.textColor || "#ffffff",
+          },
+        },
+        beforeSublayerId
+      );
+
+      this.map.addLayer(
+        {
+          id: `${layer.id}-unclustered-point`,
+          type: "circle",
+          source: sourceId,
+          filter: ["!", ["has", "point_count"]],
+          layout: { visibility },
+          paint: {
+            "circle-color": baseColor,
+            "circle-radius": style.radius || 6,
+            "circle-stroke-width": strokeWidth || 1.5,
+            "circle-stroke-color": strokeColor || "#ffffff",
+          },
+        },
+        beforeSublayerId
+      );
+
+      this.setupClusterInteraction(layer.id, sourceId);
+      return;
+    }
 
     switch (layer.type) {
       case "fill": {
@@ -445,6 +643,7 @@ export class A2MapReconciler {
             id: `${layer.id}-fill`,
             type: "fill",
             source: sourceId,
+            ...sourceLayerOpt,
             layout: { visibility },
             paint: {
               "fill-color": baseColor,
@@ -459,6 +658,7 @@ export class A2MapReconciler {
             id: `${layer.id}-line-bg`,
             type: "line",
             source: sourceId,
+            ...sourceLayerOpt,
             layout: { visibility },
             paint: {
               "line-color": "#000000",
@@ -474,6 +674,7 @@ export class A2MapReconciler {
             id: `${layer.id}-line`,
             type: "line",
             source: sourceId,
+            ...sourceLayerOpt,
             layout: { visibility },
             paint: {
               "line-color": strokeColor,
@@ -492,6 +693,7 @@ export class A2MapReconciler {
             id: `${layer.id}-extrusion`,
             type: "fill-extrusion",
             source: sourceId,
+            ...sourceLayerOpt,
             layout: { visibility },
             paint: {
               "fill-extrusion-color": baseColor,
@@ -511,6 +713,7 @@ export class A2MapReconciler {
             id: `${layer.id}-line-bg`,
             type: "line",
             source: sourceId,
+            ...sourceLayerOpt,
             layout: { visibility },
             paint: {
               "line-color": "#000000",
@@ -525,6 +728,7 @@ export class A2MapReconciler {
             id: `${layer.id}-line`,
             type: "line",
             source: sourceId,
+            ...sourceLayerOpt,
             layout: { visibility },
             paint: {
               "line-color": strokeColor,
@@ -535,6 +739,9 @@ export class A2MapReconciler {
           },
           beforeSublayerId
         );
+        if (layer.style?.animated) {
+          this.startLineDashAnimation(layer.id);
+        }
         break;
       }
 
@@ -544,6 +751,7 @@ export class A2MapReconciler {
             id: `${layer.id}-circle`,
             type: "circle",
             source: sourceId,
+            ...sourceLayerOpt,
             layout: { visibility },
             paint: {
               "circle-radius": style.radius || 7,
@@ -563,6 +771,7 @@ export class A2MapReconciler {
             id: `${layer.id}-heatmap`,
             type: "heatmap",
             source: sourceId,
+            ...sourceLayerOpt,
             layout: { visibility },
             paint: {
               "heatmap-radius": style.radius || 25,
@@ -580,6 +789,7 @@ export class A2MapReconciler {
             id: `${layer.id}-symbol`,
             type: "symbol",
             source: sourceId,
+            ...sourceLayerOpt,
             layout: {
               visibility,
               "text-field": style.textField || ["get", "name"],
@@ -617,6 +827,13 @@ export class A2MapReconciler {
         this.map.setLayoutProperty(id, "visibility", visibility);
       }
     };
+
+    if (layer.source.cluster) {
+      updateVisibility(`${layer.id}-clusters`);
+      updateVisibility(`${layer.id}-cluster-count`);
+      updateVisibility(`${layer.id}-unclustered-point`);
+      return;
+    }
 
     switch (layer.type) {
       case "fill": {
@@ -671,6 +888,11 @@ export class A2MapReconciler {
             this.map.setPaintProperty(lineId, "line-dasharray", style.dashArray);
           }
         }
+        if (layer.style?.animated) {
+          this.startLineDashAnimation(layer.id);
+        } else {
+          this.cancelLineAnimation(layer.id);
+        }
         break;
       }
 
@@ -721,6 +943,7 @@ export class A2MapReconciler {
   }
 
   private removeLayerGroup(layerId: string): void {
+    this.cancelLineAnimation(layerId);
     const subLayerSuffixes = [
       "-fill",
       "-line",
@@ -730,6 +953,9 @@ export class A2MapReconciler {
       "-heatmap",
       "-raster",
       "-symbol",
+      "-clusters",
+      "-cluster-count",
+      "-unclustered-point",
     ];
     for (const suffix of subLayerSuffixes) {
       const fullId = `${layerId}${suffix}`;
@@ -824,6 +1050,9 @@ export class A2MapReconciler {
   }
 
   public destroy(): void {
+    for (const layerId of Array.from(this.lineAnimationFrames.keys())) {
+      this.cancelLineAnimation(layerId);
+    }
     for (const ctrl of this.activeControls.values()) {
       this.map.removeControl(ctrl);
     }

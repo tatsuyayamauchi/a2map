@@ -5,7 +5,7 @@ import type { A2MapController } from "../src/types.js";
 describe("getA2MapTools", () => {
   it("defaults to OpenAI tool format", () => {
     const tools = getA2MapTools() as Array<{ type: string; function: { name: string } }>;
-    expect(tools.length).toBe(5);
+    expect(tools.length).toBe(8);
     expect(tools[0].type).toBe("function");
     expect(tools[0].function.name).toBe("render_map");
   });
@@ -15,7 +15,7 @@ describe("getA2MapTools", () => {
       name: string;
       parameters: object;
     }>;
-    expect(tools.length).toBe(5);
+    expect(tools.length).toBe(8);
     expect(tools[0].name).toBe("render_map");
     expect(tools[0].parameters).toBeDefined();
   });
@@ -25,7 +25,7 @@ describe("getA2MapTools", () => {
       name: string;
       input_schema: object;
     }>;
-    expect(tools.length).toBe(5);
+    expect(tools.length).toBe(8);
     expect(tools[0].name).toBe("render_map");
     expect(tools[0].input_schema).toBeDefined();
   });
@@ -136,6 +136,76 @@ describe("executeA2MapToolCall", () => {
       })
     );
     expect(result).toEqual({ success: true, message: "Map spec updated." });
+  });
+
+  it("executes create_buffer tool call and optionally updates spec", () => {
+    const controller = createMockController();
+    const specUpdater = vi.fn();
+
+    const result = executeA2MapToolCall(
+      "create_buffer",
+      {
+        center: [139.767, 35.681],
+        radiusMeters: 500,
+        layerId: "buffer-zone",
+        color: "#10b981",
+      },
+      controller,
+      specUpdater
+    ) as { success: boolean; radiusMeters: number; feature: { geometry: { type: string } } };
+
+    expect(result.success).toBe(true);
+    expect(result.radiusMeters).toBe(500);
+    expect(result.feature.geometry.type).toBe("Polygon");
+    expect(specUpdater).toHaveBeenCalledWith(
+      expect.objectContaining({
+        layers: [
+          expect.objectContaining({
+            id: "buffer-zone",
+            type: "fill",
+            style: expect.objectContaining({ color: "#10b981" }),
+          }),
+        ],
+      })
+    );
+  });
+
+  it("executes calculate_distance tool call", () => {
+    const controller = createMockController();
+    const result = executeA2MapToolCall(
+      "calculate_distance",
+      {
+        coord1: [139.767, 35.681], // Tokyo Station
+        coord2: [139.7, 35.69], // Shinjuku
+        unit: "km",
+      },
+      controller
+    ) as { success: boolean; distance: number; unit: string };
+
+    expect(result.success).toBe(true);
+    expect(result.distance).toBeGreaterThan(5);
+    expect(result.distance).toBeLessThan(10);
+    expect(result.unit).toBe("km");
+  });
+
+  it("executes get_centroid tool call", () => {
+    const controller = createMockController();
+    const result = executeA2MapToolCall(
+      "get_centroid",
+      {
+        coordinates: [
+          [139.0, 35.0],
+          [140.0, 35.0],
+          [140.0, 36.0],
+          [139.0, 36.0],
+        ],
+      },
+      controller
+    ) as { success: boolean; centroid: [number, number] };
+
+    expect(result.success).toBe(true);
+    expect(result.centroid[0]).toBeCloseTo(139.5, 1);
+    expect(result.centroid[1]).toBeCloseTo(35.5, 1);
   });
 
   it("throws on unknown tool name", () => {

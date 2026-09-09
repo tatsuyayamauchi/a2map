@@ -10,10 +10,58 @@ export class A2MapOverlayManager {
   private activePopups = new Map<string, Popup>();
   private activePopupDefs = new Map<string, A2MapPopup>();
   private hoverPopup: Popup | null = null;
+  private markerAnimationFrames = new Map<string, number>();
 
   constructor(map: MapLibreMap, onEvent: (event: A2MapEvent) => void) {
     this.map = map;
     this.onEvent = onEvent;
+  }
+
+  private cancelMarkerAnimation(markerId: string): void {
+    const frame = this.markerAnimationFrames.get(markerId);
+    if (frame !== undefined && typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(frame);
+      this.markerAnimationFrames.delete(markerId);
+    }
+  }
+
+  private animateMarkerCoordinates(
+    markerId: string,
+    marker: Marker,
+    from: [number, number],
+    to: [number, number],
+    durationMs: number
+  ): void {
+    this.cancelMarkerAnimation(markerId);
+
+    if (typeof requestAnimationFrame !== "function") {
+      marker.setLngLat(to);
+      return;
+    }
+
+    const startTime = performance.now();
+
+    const step = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / durationMs, 1);
+      // Smooth easeInOutQuad easing
+      const ease =
+        progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+      const currentLng = from[0] + (to[0] - from[0]) * ease;
+      const currentLat = from[1] + (to[1] - from[1]) * ease;
+
+      marker.setLngLat([currentLng, currentLat]);
+
+      if (progress < 1) {
+        this.markerAnimationFrames.set(markerId, requestAnimationFrame(step));
+      } else {
+        this.markerAnimationFrames.delete(markerId);
+        marker.setLngLat(to);
+      }
+    };
+
+    this.markerAnimationFrames.set(markerId, requestAnimationFrame(step));
   }
 
   public reconcileMarkers(markers: A2MapMarker[] = []): void {
@@ -22,6 +70,7 @@ export class A2MapOverlayManager {
     // Remove deleted markers
     for (const [id, marker] of this.activeMarkers.entries()) {
       if (!incomingIds.has(id)) {
+        this.cancelMarkerAnimation(id);
         marker.remove();
         this.activeMarkers.delete(id);
         this.activeMarkerDefs.delete(id);
@@ -44,7 +93,23 @@ export class A2MapOverlayManager {
           prevDef.coordinates[0] !== markerDef.coordinates[0] ||
           prevDef.coordinates[1] !== markerDef.coordinates[1]
         ) {
-          existingMarker.setLngLat(markerDef.coordinates);
+          if (markerDef.animateMovement && prevDef) {
+            const duration =
+              typeof markerDef.animateMovement === "object" &&
+              typeof markerDef.animateMovement.durationMs === "number"
+                ? markerDef.animateMovement.durationMs
+                : 800;
+            this.animateMarkerCoordinates(
+              markerDef.id,
+              existingMarker,
+              prevDef.coordinates,
+              markerDef.coordinates,
+              duration
+            );
+          } else {
+            this.cancelMarkerAnimation(markerDef.id);
+            existingMarker.setLngLat(markerDef.coordinates);
+          }
         }
 
         // Check if visuals or properties changed
@@ -92,7 +157,7 @@ export class A2MapOverlayManager {
 
   private createMarker(markerDef: A2MapMarker): Marker {
     let el = markerDef.element;
-    if (!el && markerDef.label) {
+    if (!el && markerDef.label && typeof document !== "undefined") {
       el = document.createElement("div");
       el.className = "a2map-custom-marker";
       const sanitizedColor = escapeHtml(markerDef.color || "#3b82f6");
@@ -210,6 +275,9 @@ export class A2MapOverlayManager {
   }
 
   public destroy(): void {
+    for (const id of Array.from(this.markerAnimationFrames.keys())) {
+      this.cancelMarkerAnimation(id);
+    }
     for (const m of this.activeMarkers.values()) {
       m.remove();
     }

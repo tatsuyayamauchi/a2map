@@ -101,6 +101,7 @@ export interface A2MapLayerStyle {
   textColor?: string;
   textHaloColor?: string;
   textHaloWidth?: number;
+  animated?: boolean | { durationMs?: number; dashLength?: number };
 }
 
 export interface A2MapTooltipConfig {
@@ -109,18 +110,32 @@ export interface A2MapTooltipConfig {
   template?: string; // HTML or Markdown format
 }
 
+export interface A2MapClusterStyle {
+  radius?: number;
+  colors?: Array<{ count: number; color: string }>;
+  textColor?: string;
+}
+
+export interface A2MapLayerSource {
+  type: "geojson" | "raster" | "vector" | "pmtiles";
+  data?: Feature | FeatureCollection | Geometry;
+  tiles?: string[];
+  tileSize?: number;
+  attribution?: string;
+  url?: string; // TileJSON, vector tile URL, or pmtiles URL (e.g. pmtiles://https://...)
+  cluster?: boolean;
+  clusterMaxZoom?: number;
+  clusterRadius?: number;
+}
+
 export interface A2MapLayer {
   id: string;
   type: A2MapLayerType;
   label?: string;
-  source: {
-    type: "geojson" | "raster";
-    data?: Feature | FeatureCollection | Geometry;
-    tiles?: string[];
-    tileSize?: number;
-    attribution?: string;
-  };
+  source: A2MapLayerSource;
+  sourceLayer?: string; // Specific layer name within vector/pmtiles tile
   style?: A2MapLayerStyle;
+  clusterStyle?: A2MapClusterStyle;
   visible?: boolean;
   minZoom?: number;
   maxZoom?: number;
@@ -139,6 +154,7 @@ export interface A2MapMarker {
   draggable?: boolean;
   popupHtml?: string;
   element?: HTMLElement;
+  animateMovement?: boolean | { durationMs?: number };
 }
 
 export interface A2MapPopup {

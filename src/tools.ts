@@ -1,5 +1,6 @@
 import type { A2MapController, A2MapSpec, A2MapMarker } from "./types.js";
 import { parseA2MapSpec } from "./schema.js";
+import { calculateDistance, createBuffer, getCentroid } from "./spatial.js";
 
 /**
  * Standard JSON Schema parameters for A2Map agent tools.
@@ -249,12 +250,102 @@ export const A2MAP_INSPECT_MAP_TOOL = {
   },
 };
 
+export const A2MAP_CREATE_BUFFER_TOOL = {
+  name: "create_buffer",
+  description:
+    "Generates a circular buffer polygon around a center [longitude, latitude] coordinate with a specified radius in meters, optionally rendering it as a map layer.",
+  parameters: {
+    type: "object",
+    required: ["center", "radiusMeters"],
+    properties: {
+      center: {
+        type: "array",
+        items: { type: "number" },
+        minItems: 2,
+        maxItems: 2,
+        description: "Center coordinates as [longitude, latitude].",
+      },
+      radiusMeters: {
+        type: "number",
+        description: "Buffer radius in meters (e.g. 500 for 500m radius).",
+      },
+      layerId: {
+        type: "string",
+        description: "Optional layer ID to immediately render this buffer polygon onto the map.",
+      },
+      color: {
+        type: "string",
+        description: "Optional hex color for the buffer polygon (default #3b82f6).",
+      },
+      opacity: {
+        type: "number",
+        description: "Optional fill opacity for the buffer polygon (default 0.35).",
+      },
+    },
+  },
+};
+
+export const A2MAP_CALCULATE_DISTANCE_TOOL = {
+  name: "calculate_distance",
+  description:
+    "Calculates the geodesic distance between two geographic coordinates [longitude, latitude] in kilometers or meters.",
+  parameters: {
+    type: "object",
+    required: ["coord1", "coord2"],
+    properties: {
+      coord1: {
+        type: "array",
+        items: { type: "number" },
+        minItems: 2,
+        maxItems: 2,
+        description: "First coordinate [longitude, latitude].",
+      },
+      coord2: {
+        type: "array",
+        items: { type: "number" },
+        minItems: 2,
+        maxItems: 2,
+        description: "Second coordinate [longitude, latitude].",
+      },
+      unit: {
+        type: "string",
+        enum: ["km", "m"],
+        description: "Unit of measurement ('km' or 'm', defaults to 'km').",
+      },
+    },
+  },
+};
+
+export const A2MAP_GET_CENTROID_TOOL = {
+  name: "get_centroid",
+  description: "Calculates the geometric centroid [longitude, latitude] of a list of coordinates.",
+  parameters: {
+    type: "object",
+    required: ["coordinates"],
+    properties: {
+      coordinates: {
+        type: "array",
+        items: {
+          type: "array",
+          items: { type: "number" },
+          minItems: 2,
+          maxItems: 2,
+        },
+        description: "Array of [longitude, latitude] coordinates.",
+      },
+    },
+  },
+};
+
 export const ALL_A2MAP_TOOLS = [
   A2MAP_RENDER_MAP_TOOL,
   A2MAP_FLY_TO_TOOL,
   A2MAP_FIT_BOUNDS_TOOL,
   A2MAP_ADD_MARKERS_TOOL,
   A2MAP_INSPECT_MAP_TOOL,
+  A2MAP_CREATE_BUFFER_TOOL,
+  A2MAP_CALCULATE_DISTANCE_TOOL,
+  A2MAP_GET_CENTROID_TOOL,
 ] as const;
 
 export type A2MapToolName =
@@ -262,7 +353,10 @@ export type A2MapToolName =
   | "fly_to_location"
   | "fit_bounds"
   | "add_markers"
-  | "inspect_map";
+  | "inspect_map"
+  | "create_buffer"
+  | "calculate_distance"
+  | "get_centroid";
 
 export interface GetA2MapToolsOptions {
   format?: "openai" | "gemini" | "anthropic" | "json_schema";
@@ -376,6 +470,53 @@ export function executeA2MapToolCall(
         maxFeatures: typeof args.maxFeatures === "number" ? args.maxFeatures : 20,
       });
       return { success: true, context };
+    }
+
+    case "create_buffer": {
+      const center = args.center as [number, number];
+      const radiusMeters = Number(args.radiusMeters);
+      const feature = createBuffer(center, radiusMeters);
+
+      if (args.layerId && specUpdater) {
+        specUpdater({
+          version: "1.0",
+          layers: [
+            {
+              id: String(args.layerId),
+              type: "fill",
+              source: {
+                type: "geojson",
+                data: feature,
+              },
+              style: {
+                color: typeof args.color === "string" ? args.color : "#3b82f6",
+                opacity: typeof args.opacity === "number" ? args.opacity : 0.35,
+              },
+            },
+          ],
+        });
+      }
+
+      return {
+        success: true,
+        center,
+        radiusMeters,
+        feature,
+      };
+    }
+
+    case "calculate_distance": {
+      const coord1 = args.coord1 as [number, number];
+      const coord2 = args.coord2 as [number, number];
+      const unit = (args.unit as "km" | "m") || "km";
+      const distance = calculateDistance(coord1, coord2, unit);
+      return { success: true, coord1, coord2, distance, unit };
+    }
+
+    case "get_centroid": {
+      const coordinates = args.coordinates as Array<[number, number]>;
+      const centroid = getCentroid(coordinates);
+      return { success: true, centroid };
     }
 
     default:

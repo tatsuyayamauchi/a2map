@@ -148,6 +148,15 @@ export const a2MapLayerStyleSchema = z.object({
   textColor: z.string().optional(),
   textHaloColor: z.string().optional(),
   textHaloWidth: z.coerce.number().optional(),
+  animated: z
+    .union([
+      z.boolean(),
+      z.object({
+        durationMs: z.coerce.number().optional(),
+        dashLength: z.coerce.number().optional(),
+      }),
+    ])
+    .optional(),
 });
 
 export const a2MapTooltipConfigSchema = z.object({
@@ -156,18 +165,39 @@ export const a2MapTooltipConfigSchema = z.object({
   template: z.string().optional(),
 });
 
+export const a2MapClusterStyleSchema = z.object({
+  radius: z.coerce.number().optional(),
+  colors: z
+    .array(
+      z.object({
+        count: z.coerce.number(),
+        color: z.string(),
+      })
+    )
+    .optional(),
+  textColor: z.string().optional(),
+});
+
+export const a2MapLayerSourceSchema = z.object({
+  type: z.enum(["geojson", "raster", "vector", "pmtiles"]),
+  data: z.any().optional(),
+  tiles: z.array(z.string()).optional(),
+  tileSize: z.coerce.number().optional(),
+  attribution: z.string().optional(),
+  url: z.string().optional(),
+  cluster: z.boolean().optional(),
+  clusterMaxZoom: z.coerce.number().optional(),
+  clusterRadius: z.coerce.number().optional(),
+});
+
 export const a2MapLayerSchema = z.object({
   id: z.string(),
   type: z.enum(["fill", "line", "circle", "fill-extrusion", "heatmap", "raster", "symbol"]),
   label: z.string().optional(),
-  source: z.object({
-    type: z.enum(["geojson", "raster"]),
-    data: z.any().optional(),
-    tiles: z.array(z.string()).optional(),
-    tileSize: z.coerce.number().optional(),
-    attribution: z.string().optional(),
-  }),
+  source: a2MapLayerSourceSchema,
+  sourceLayer: z.string().optional(),
   style: a2MapLayerStyleSchema.optional(),
+  clusterStyle: a2MapClusterStyleSchema.optional(),
   visible: z.boolean().optional(),
   minZoom: z.coerce.number().optional(),
   maxZoom: z.coerce.number().optional(),
@@ -186,6 +216,14 @@ export const a2MapMarkerSchema = z.object({
   draggable: z.boolean().optional(),
   popupHtml: z.string().optional(),
   element: z.any().optional(),
+  animateMovement: z
+    .union([
+      z.boolean(),
+      z.object({
+        durationMs: z.coerce.number().optional(),
+      }),
+    ])
+    .optional(),
 });
 
 export const a2MapPopupSchema = z.object({
