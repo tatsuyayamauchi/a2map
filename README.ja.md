@@ -197,6 +197,30 @@ interface A2MapController {
 - [`examples/04-markers-and-popups.tsx`](./examples/04-markers-and-popups.tsx): ドラッグ可能なピンマーカー、カスタム吹出しポップアップ、ドラッグ完了イベント
 - [`examples/05-natural-language-to-map.tsx`](./examples/05-natural-language-to-map.tsx): **【目玉機能】自然言語（口頭・テキスト）指示から AI が地図スペック（A2MapSpec）を自律生成しリアルタイム描画するインタラクティブデモ**
 
+## 🌐 他言語（Go / Python 等）バックエンドとの連携 & JSON Schema
+
+`a2map` の仕様は完全な宣言的 JSON プロトコルとして設計されているため、バックエンドが Go や Python、Rust であっても容易に連携可能です。
+
+### JSON Schema のエクスポート
+
+```bash
+pnpm schema:export
+```
+
+上記コマンドを実行すると、`schema/` 配下に標準 JSON Schema（Draft 2020-12）が出力されます：
+
+- [`schema/a2map.schema.json`](./schema/a2map.schema.json): `A2MapSpec` の完全なスキーマ定義。Go や Python 等で型定義（struct / Pydantic モデル）を自動生成する際に利用できます。
+- [`schema/a2map-tools.schema.json`](./schema/a2map-tools.schema.json): エージェント向け Function Calling ツール（8種類）の定義スキーマ。
+
+#### 例: Go 言語での構造体自動生成
+
+[quicktype](https://github.com/glideapps/quicktype) または [go-jsonschema](https://github.com/omissis/go-jsonschema) を使用して、1 コマンドで Go の `struct` を生成できます：
+
+```bash
+# quicktype を使った Go struct 生成例
+npx quicktype -s schema -o a2map_spec.go schema/a2map.schema.json --package a2map
+```
+
 ---
 
 ## 📜 ライセンス

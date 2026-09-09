@@ -197,6 +197,30 @@ Refer to the included example files for practical implementation recipes:
 - [`examples/04-markers-and-popups.tsx`](./examples/04-markers-and-popups.tsx): Draggable pins, custom HTML markers, and popups.
 - [`examples/05-natural-language-to-map.tsx`](./examples/05-natural-language-to-map.tsx): **Natural Language Prompt to Map (AI Agent autonomously synthesizes A2MapSpec and renders map in real-time).**
 
+## 🌐 Multi-Language (Go, Python, etc.) Integration & JSON Schema
+
+Because `a2map` is designed around a fully declarative JSON protocol, backends written in Go, Python, Rust, or any language can easily generate map specs and control the map.
+
+### Exporting JSON Schema
+
+```bash
+pnpm schema:export
+```
+
+This exports standard JSON Schema (Draft 2020-12) files into the `schema/` directory:
+
+- [`schema/a2map.schema.json`](./schema/a2map.schema.json): Complete specification schema for `A2MapSpec`.
+- [`schema/a2map-tools.schema.json`](./schema/a2map-tools.schema.json): Standard Function Calling tool definitions (8 tools) for LLMs.
+
+#### Example: Generating Go Structs
+
+You can use [quicktype](https://github.com/glideapps/quicktype) or [go-jsonschema](https://github.com/omissis/go-jsonschema) to generate native Go structs:
+
+```bash
+# Generate Go structs using quicktype
+npx quicktype -s schema -o a2map_spec.go schema/a2map.schema.json --package a2map
+```
+
 ---
 
 ## License

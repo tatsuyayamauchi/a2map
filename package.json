@@ -14,7 +14,8 @@
   ],
   "license": "Apache-2.0",
   "files": [
-    "dist"
+    "dist",
+    "schema"
   ],
   "type": "module",
   "main": "dist/index.js",
@@ -25,12 +26,15 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./schema.json": "./schema/a2map.schema.json",
+    "./schema/*": "./schema/*",
     "./style.css": "./dist/a2map.css",
     "./dist/a2map.css": "./dist/a2map.css"
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc && node -e \"fs.copyFileSync('src/a2map.css', 'dist/a2map.css')\"",
+    "build": "tsc && node -e \"fs.copyFileSync('src/a2map.css', 'dist/a2map.css')\" && pnpm schema:export",
+    "schema:export": "node scripts/export-schema.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "oxlint",

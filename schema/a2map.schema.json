@@ -1,0 +1,981 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "canvas": {
+      "type": "object",
+      "properties": {
+        "baseStyle": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          ]
+        },
+        "projection": {
+          "type": "string",
+          "enum": [
+            "mercator",
+            "globe"
+          ]
+        },
+        "camera": {
+          "type": "object",
+          "properties": {
+            "center": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                {
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              ]
+            },
+            "zoom": {
+              "type": "number"
+            },
+            "pitch": {
+              "type": "number"
+            },
+            "bearing": {
+              "type": "number"
+            },
+            "bounds": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 4,
+                  "maxItems": 4
+                },
+                {
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              ]
+            },
+            "padding": {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "type": "number"
+                },
+                "bottom": {
+                  "type": "number"
+                },
+                "left": {
+                  "type": "number"
+                },
+                "right": {
+                  "type": "number"
+                }
+              }
+            },
+            "animation": {
+              "type": "string",
+              "enum": [
+                "flyTo",
+                "jumpTo",
+                "easeTo"
+              ]
+            },
+            "durationMs": {
+              "type": "number"
+            },
+            "essential": {
+              "type": "boolean"
+            }
+          }
+        },
+        "terrain": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string"
+            },
+            "exaggeration": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "source"
+          ]
+        },
+        "controls": {
+          "type": "object",
+          "properties": {
+            "navigation": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "showCompass": {
+                      "type": "boolean"
+                    },
+                    "showZoom": {
+                      "type": "boolean"
+                    },
+                    "visualizePitch": {
+                      "type": "boolean"
+                    },
+                    "position": {
+                      "type": "string",
+                      "enum": [
+                        "top-left",
+                        "top-right",
+                        "bottom-left",
+                        "bottom-right"
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            "scale": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "maxWidth": {
+                      "type": "number"
+                    },
+                    "unit": {
+                      "type": "string",
+                      "enum": [
+                        "metric",
+                        "imperial",
+                        "nautical"
+                      ]
+                    },
+                    "position": {
+                      "type": "string",
+                      "enum": [
+                        "top-left",
+                        "top-right",
+                        "bottom-left",
+                        "bottom-right"
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            "fullscreen": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "position": {
+                      "type": "string",
+                      "enum": [
+                        "top-left",
+                        "top-right",
+                        "bottom-left",
+                        "bottom-right"
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            "geolocate": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "position": {
+                      "type": "string",
+                      "enum": [
+                        "top-left",
+                        "top-right",
+                        "bottom-left",
+                        "bottom-right"
+                      ]
+                    },
+                    "trackUserLocation": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              ]
+            },
+            "attribution": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "compact": {
+                      "type": "boolean"
+                    },
+                    "customAttribution": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      ]
+                    },
+                    "position": {
+                      "type": "string",
+                      "enum": [
+                        "top-left",
+                        "top-right",
+                        "bottom-left",
+                        "bottom-right"
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "interactions": {
+          "type": "object",
+          "properties": {
+            "scrollZoom": {
+              "type": "boolean"
+            },
+            "boxZoom": {
+              "type": "boolean"
+            },
+            "dragRotate": {
+              "type": "boolean"
+            },
+            "dragPan": {
+              "type": "boolean"
+            },
+            "keyboard": {
+              "type": "boolean"
+            },
+            "doubleClickZoom": {
+              "type": "boolean"
+            },
+            "touchZoomRotate": {
+              "type": "boolean"
+            },
+            "touchPitch": {
+              "type": "boolean"
+            }
+          }
+        },
+        "minZoom": {
+          "type": "number"
+        },
+        "maxZoom": {
+          "type": "number"
+        },
+        "minPitch": {
+          "type": "number"
+        },
+        "maxPitch": {
+          "type": "number"
+        },
+        "maxBounds": {
+          "anyOf": [
+            {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "items": false,
+              "minItems": 4,
+              "maxItems": 4
+            },
+            {
+              "minItems": 4,
+              "maxItems": 4,
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "layers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "fill",
+              "line",
+              "circle",
+              "fill-extrusion",
+              "heatmap",
+              "raster",
+              "symbol"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "geojson",
+                  "raster",
+                  "vector",
+                  "pmtiles"
+                ]
+              },
+              "data": {},
+              "tiles": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "tileSize": {
+                "type": "number"
+              },
+              "attribution": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "cluster": {
+                "type": "boolean"
+              },
+              "clusterMaxZoom": {
+                "type": "number"
+              },
+              "clusterRadius": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "sourceLayer": {
+            "type": "string"
+          },
+          "style": {
+            "type": "object",
+            "properties": {
+              "color": {
+                "type": "string"
+              },
+              "strokeColor": {
+                "type": "string"
+              },
+              "strokeWidth": {
+                "type": "number"
+              },
+              "opacity": {
+                "type": "number"
+              },
+              "dashArray": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "height": {
+                "type": "number"
+              },
+              "base": {
+                "type": "number"
+              },
+              "radius": {
+                "type": "number"
+              },
+              "textField": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "array",
+                    "items": {}
+                  }
+                ]
+              },
+              "textSize": {
+                "type": "number"
+              },
+              "textColor": {
+                "type": "string"
+              },
+              "textHaloColor": {
+                "type": "string"
+              },
+              "textHaloWidth": {
+                "type": "number"
+              },
+              "animated": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "durationMs": {
+                        "type": "number"
+                      },
+                      "dashLength": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "clusterStyle": {
+            "type": "object",
+            "properties": {
+              "radius": {
+                "type": "number"
+              },
+              "colors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "number"
+                    },
+                    "color": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "count",
+                    "color"
+                  ]
+                }
+              },
+              "textColor": {
+                "type": "string"
+              }
+            }
+          },
+          "visible": {
+            "type": "boolean"
+          },
+          "minZoom": {
+            "type": "number"
+          },
+          "maxZoom": {
+            "type": "number"
+          },
+          "interactive": {
+            "type": "boolean"
+          },
+          "tooltip": {
+            "type": "object",
+            "properties": {
+              "fields": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "title": {
+                "type": "string"
+              },
+              "template": {
+                "type": "string"
+              }
+            }
+          },
+          "beforeId": {
+            "type": "string"
+          },
+          "zIndex": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "source"
+        ]
+      }
+    },
+    "markers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "coordinates": {
+            "anyOf": [
+              {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2
+              },
+              {
+                "minItems": 2,
+                "maxItems": 2,
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              }
+            ]
+          },
+          "color": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "draggable": {
+            "type": "boolean"
+          },
+          "popupHtml": {
+            "type": "string"
+          },
+          "element": {},
+          "animateMovement": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "durationMs": {
+                    "type": "number"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "coordinates"
+        ]
+      }
+    },
+    "popups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "coordinates": {
+            "anyOf": [
+              {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2
+              },
+              {
+                "minItems": 2,
+                "maxItems": 2,
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              }
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "closeButton": {
+            "type": "boolean"
+          },
+          "closeOnClick": {
+            "type": "boolean"
+          },
+          "maxWidth": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "coordinates",
+          "content"
+        ]
+      }
+    },
+    "widgets": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "legend"
+              },
+              "position": {
+                "type": "string",
+                "enum": [
+                  "top-left",
+                  "top-right",
+                  "bottom-left",
+                  "bottom-right",
+                  "top-center",
+                  "bottom-center"
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "color": {
+                      "type": "string"
+                    },
+                    "shape": {
+                      "type": "string",
+                      "enum": [
+                        "square",
+                        "circle",
+                        "line"
+                      ]
+                    },
+                    "description": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "color"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "items"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "action_panel"
+              },
+              "position": {
+                "type": "string",
+                "enum": [
+                  "top-left",
+                  "top-right",
+                  "bottom-left",
+                  "bottom-right",
+                  "top-center",
+                  "bottom-center"
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "actions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "icon": {
+                      "type": "string"
+                    },
+                    "variant": {
+                      "type": "string",
+                      "enum": [
+                        "primary",
+                        "secondary",
+                        "danger",
+                        "ghost"
+                      ]
+                    },
+                    "disabled": {
+                      "type": "boolean"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "actions"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "metrics_card"
+              },
+              "position": {
+                "type": "string",
+                "enum": [
+                  "top-left",
+                  "top-right",
+                  "bottom-left",
+                  "bottom-right",
+                  "top-center",
+                  "bottom-center"
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "metrics": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": [
+                        "string",
+                        "number"
+                      ]
+                    },
+                    "unit": {
+                      "type": "string"
+                    },
+                    "change": {
+                      "type": "string"
+                    },
+                    "trend": {
+                      "type": "string",
+                      "enum": [
+                        "up",
+                        "down",
+                        "neutral"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "value"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "title",
+              "metrics"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "banner"
+              },
+              "position": {
+                "type": "string",
+                "enum": [
+                  "top-left",
+                  "top-right",
+                  "bottom-left",
+                  "bottom-right",
+                  "top-center",
+                  "bottom-center"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "level": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "success",
+                  "warning",
+                  "alert"
+                ]
+              },
+              "durationMs": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "message"
+            ]
+          }
+        ]
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    }
+  },
+  "required": [
+    "version"
+  ],
+  "title": "A2MapSpec",
+  "description": "Agent-to-Map UI (A2Map) declarative geospatial map specification schema for generative AI agents.",
+  "$id": "https://raw.githubusercontent.com/tatsuyayamauchi/a2map/main/schema/a2map.schema.json"
+}
